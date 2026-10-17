@@ -34,18 +34,19 @@ Guarda las claves interactivamente en Firebase Secret Manager. La CLI te
 solicita cada valor; no lo agregues como argumento al comando:
 
 ```powershell
-firebase functions:secrets:set GEMINI_API_KEY --project TU_PROJECT_ID
-firebase functions:secrets:set TMDB_API_KEY --project TU_PROJECT_ID
+firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set TMDB_API_KEY
 ```
 
 Compila Flutter Web y despliega Functions y Hosting:
 
 ```powershell
 flutter build web
-firebase deploy --only functions,hosting --project TU_PROJECT_ID
+firebase deploy --only functions,hosting
 ```
 
-La web quedará en `https://TU_PROJECT_ID.web.app`. Firebase Hosting dirige las
+El proyecto `pelichrusia` ya está seleccionado en `.firebaserc`. La web quedará
+en `https://pelichrusia.web.app`. Firebase Hosting dirige las
 peticiones `/api/recommendations` al backend. Functions está en la región
 `us-central1`.
 
@@ -59,12 +60,12 @@ Para ejecutar Android o iOS contra el backend desplegado, usa la URL base
 pública de la función (no es una clave):
 
 ```powershell
-flutter run --dart-define="FIREBASE_FUNCTIONS_URL=https://us-central1-TU_PROJECT_ID.cloudfunctions.net/api"
+flutter run
 ```
 
-La URL también se puede establecer en la configuración de ejecución de VS Code.
-No pases `GEMINI_API_KEY` ni `TMDB_API_KEY` a Flutter: el backend los lee como
-secretos gestionados por Firebase.
+La URL del backend móvil ya está configurada para `pelichrusia`. No pases
+`GEMINI_API_KEY` ni `TMDB_API_KEY` a Flutter: el backend los lee como secretos
+gestionados por Firebase.
 
 ## Probar las funciones localmente
 
@@ -79,7 +80,7 @@ Ese archivo está excluido de Git. No pegues claves en el código ni lo subas a
 GitHub. Inicia los emuladores con:
 
 ```powershell
-firebase emulators:start --only functions,hosting --project TU_PROJECT_ID
+firebase emulators:start --only functions,hosting --project pelichrusia
 ```
 
 ## Imágenes
