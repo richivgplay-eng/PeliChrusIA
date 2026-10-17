@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -89,25 +90,19 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     });
 
     try {
-      final resultado = await _consultarGemini(texto);
-      final respuesta = resultado['respuesta']! as String;
-      final titulos = resultado['titulos']! as List<String>;
+      final resultado = await _consultarBackend(texto);
+      final respuesta = resultado['respuesta'] as String;
+      final peliculas = (resultado['peliculas'] as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(_Pelicula.fromJson)
+          .toList();
 
       if (!mounted) return;
       setState(() {
         estadoChrus = 'feliz';
         _mensajes.add(_MensajeChat(texto: respuesta, esUsuario: false));
+        _peliculas = peliculas;
       });
-      try {
-        await _buscarEnTMDB(titulos);
-      } on _ApiException catch (error) {
-        _mostrarError(error.message);
-      } on http.ClientException catch (error) {
-        _mostrarError('No se pudo conectar con TMDB: ${error.message}');
-      } on FormatException catch (error) {
-        _mostrarError('TMDB devolvió una respuesta inválida: ${error.message}');
-      }
-
       try {
         await _voz.speak(respuesta);
       } on PlatformException catch (error) {
@@ -128,7 +123,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         });
       }
     } on http.ClientException catch (error) {
-      _mostrarError('No se pudo conectar con Gemini: ${error.message}');
+      _mostrarError('No se pudo conectar con el backend: ${error.message}');
       if (mounted) {
         setState(() {
           estadoChrus = 'triste';
@@ -140,14 +135,43 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           );
         });
       }
-    } on FormatException catch (error) {
-      _mostrarError('Gemini devolvió una respuesta inválida: ${error.message}');
+    } on TimeoutException {
+      _mostrarError(
+          'El servidor tardó demasiado en responder. Inténtalo otra vez.');
       if (mounted) {
         setState(() {
           estadoChrus = 'triste';
           _mensajes.add(
             const _MensajeChat(
-              texto: 'No pude interpretar la respuesta de Gemini.',
+              texto: 'La consulta tardó demasiado. Inténtalo de nuevo.',
+              esUsuario: false,
+            ),
+          );
+        });
+      }
+    } on StateError catch (error) {
+      _mostrarError(error.message);
+      if (mounted) {
+        setState(() {
+          estadoChrus = 'triste';
+          _mensajes.add(
+            const _MensajeChat(
+              texto:
+                  'El servidor aún no está configurado para esta plataforma.',
+              esUsuario: false,
+            ),
+          );
+        });
+      }
+    } on FormatException catch (error) {
+      _mostrarError(
+          'El backend devolvió una respuesta inválida: ${error.message}');
+      if (mounted) {
+        setState(() {
+          estadoChrus = 'triste';
+          _mensajes.add(
+            const _MensajeChat(
+              texto: 'No pude interpretar la respuesta del servidor.',
               esUsuario: false,
             ),
           );
@@ -163,195 +187,31 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
-  Future<Map<String, Object>> _consultarGemini(String texto) async {
-    final apiKey = ApiConfig.geminiApiKey;
-    if (apiKey.isEmpty) {
-      throw const _ApiException(
-        'Falta GEMINI_API_KEY. Inicia la app con --dart-define.',
-      );
-    }
-
-    final uri = Uri.https(
-      'generativelanguage.googleapis.com',
-      '/v1beta/models/gemini-2.5-flash:generateContent',
-      {'key': apiKey},
-    );
-    final response = await _clienteHttp.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'contents': [
-          {
-            'parts': [
-              {
-                'text': 'Eres Chrus, un asistente de cine amable para Colombia. '
-                    'Responde en español a esta petición: "$texto". '
-                    'Recomienda hasta tres películas conocidas y devuelve '
-                    'únicamente un objeto JSON con "respuesta" (string) y '
-                    '"titulos" (array de strings con títulos de películas).',
-              },
-            ],
-          },
-        ],
-        'generationConfig': {'responseMimeType': 'application/json'},
-      }),
-    );
-    final data = _decodificarRespuesta(response, 'Gemini');
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) {
-      throw const _ApiException('Gemini no devolvió ninguna recomendación.');
-    }
-
-    final candidate = candidates.first;
-    if (candidate is! Map<String, dynamic>) {
-      throw const _ApiException(
-          'La respuesta de Gemini no tiene el formato esperado.');
-    }
-    final content = candidate['content'];
-    if (content is! Map<String, dynamic> || content['parts'] is! List) {
-      throw const _ApiException('Gemini devolvió una respuesta vacía.');
-    }
-    final parts = content['parts'] as List<dynamic>;
-    if (parts.isEmpty || parts.first is! Map<String, dynamic>) {
-      throw const _ApiException('Gemini devolvió una respuesta vacía.');
-    }
-
-    final generatedText = (parts.first as Map<String, dynamic>)['text'];
-    if (generatedText is! String) {
-      throw const _ApiException('Gemini no devolvió texto para procesar.');
-    }
-    final decodedText = jsonDecode(generatedText);
-    if (decodedText is! Map<String, dynamic> ||
-        decodedText['respuesta'] is! String ||
-        decodedText['titulos'] is! List) {
-      throw const _ApiException(
-          'Gemini devolvió recomendaciones con formato inválido.');
-    }
-
-    final titulos =
-        (decodedText['titulos'] as List<dynamic>).whereType<String>().toList();
-    if (titulos.isEmpty) {
-      throw const _ApiException('Gemini no encontró títulos para recomendar.');
-    }
-    return {
-      'respuesta': decodedText['respuesta'] as String,
-      'titulos': titulos,
-    };
-  }
-
-  Future<void> _buscarEnTMDB(List<String> titulos) async {
-    final apiKey = ApiConfig.tmdbApiKey;
-    if (apiKey.isEmpty) {
-      throw const _ApiException(
-        'Falta TMDB_API_KEY. Inicia la app con --dart-define.',
-      );
-    }
-
-    final resultados = await Future.wait(
-      titulos.take(5).map((titulo) => _buscarPeliculaEnTMDB(titulo, apiKey)),
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _peliculas = resultados.whereType<_Pelicula>().toList();
-    });
-  }
-
-  Future<_Pelicula?> _buscarPeliculaEnTMDB(
-    String titulo,
-    String apiKey,
-  ) async {
-    final uri = Uri.https('api.themoviedb.org', '/3/search/movie', {
-      'api_key': apiKey,
-      'query': titulo,
-      'language': 'es-CO',
-      'region': 'CO',
-      'include_adult': 'false',
-    });
-    final data = _decodificarRespuesta(
-      await _clienteHttp.get(uri),
-      'TMDB',
-    );
-    final results = data['results'];
-    if (results is! List || results.isEmpty) return null;
-
-    final movie = results.first;
-    if (movie is! Map<String, dynamic> || movie['id'] is! num) return null;
-    final id = (movie['id'] as num).toInt();
-    final title = movie['title'] is String ? movie['title'] as String : titulo;
-    final posterPath = movie['poster_path'];
-    final posterUrl = posterPath is String
-        ? 'https://image.tmdb.org/t/p/w500$posterPath'
-        : '';
-    final releaseDate = movie['release_date'];
-    final anio = releaseDate is String && releaseDate.length >= 4
-        ? releaseDate.substring(0, 4)
-        : 'Año desconocido';
-    final rating = movie['vote_average'];
-    final puntuacion = rating is num ? rating.toStringAsFixed(1) : 'N/D';
-
-    final plataforma = await _obtenerPlataformasTMDB(id, apiKey);
-    final trailerUrl = Uri.https(
-      'www.youtube.com',
-      '/results',
-      {'search_query': '$title tráiler'},
-    ).toString();
-
-    return _Pelicula(
-      titulo: title,
-      posterUrl: posterUrl,
-      plataforma: plataforma,
-      trailerUrl: trailerUrl,
-      anio: anio,
-      puntuacion: puntuacion,
-    );
-  }
-
-  Future<String> _obtenerPlataformasTMDB(int id, String apiKey) async {
-    final uri =
-        Uri.https('api.themoviedb.org', '/3/movie/$id/watch/providers', {
-      'api_key': apiKey,
-    });
-    final data = _decodificarRespuesta(
-      await _clienteHttp.get(uri),
-      'TMDB',
-    );
-    final results = data['results'];
-    if (results is! Map<String, dynamic>) return 'No reportada por TMDB';
-
-    final colombia = results['CO'];
-    if (colombia is! Map<String, dynamic>) return 'No disponible en Colombia';
-    final providers = colombia['flatrate'];
-    if (providers is! List || providers.isEmpty) {
-      return 'No disponible en streaming';
-    }
-
-    final nombres = providers
-        .whereType<Map<String, dynamic>>()
-        .map((provider) => provider['provider_name'])
-        .whereType<String>()
-        .toSet()
-        .toList();
-    return nombres.isEmpty ? 'No disponible en streaming' : nombres.join(', ');
-  }
-
-  Map<String, dynamic> _decodificarRespuesta(
-    http.Response response,
-    String servicio,
-  ) {
-    final dynamic decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw _ApiException('$servicio devolvió una respuesta inválida.');
+  Future<Map<String, dynamic>> _consultarBackend(String texto) async {
+    final response = await _clienteHttp
+        .post(
+          ApiConfig.recommendationsUri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'texto': texto}),
+        )
+        .timeout(const Duration(seconds: 65));
+    final dynamic body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException('El servidor devolvió datos inválidos.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final error = decoded['error'];
-      final message =
-          error is Map<String, dynamic> && error['message'] is String
-              ? error['message'] as String
-              : 'Error HTTP ${response.statusCode}.';
-      throw _ApiException('Error de $servicio: $message');
+      final error = body['error'];
+      final message = error is String
+          ? error
+          : 'El servidor devolvió el error ${response.statusCode}.';
+      throw _ApiException(message);
     }
-    return decoded;
+    if (body['respuesta'] is! String || body['peliculas'] is! List) {
+      throw const FormatException(
+        'La respuesta del servidor no tiene el formato esperado.',
+      );
+    }
+    return body;
   }
 
   Future<void> _activarMicrofono() async {
@@ -546,6 +406,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             },
           ),
         ),
+        const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text(
+            'Este producto utiliza la API de TMDB, pero no está respaldado ni '
+            'certificado por TMDB.',
+            style: TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ),
       ],
     );
   }
@@ -610,6 +478,17 @@ class _Pelicula {
     required this.anio,
     required this.puntuacion,
   });
+
+  factory _Pelicula.fromJson(Map<String, dynamic> json) {
+    return _Pelicula(
+      titulo: json['titulo'] as String,
+      posterUrl: json['posterUrl'] as String,
+      plataforma: json['plataforma'] as String,
+      trailerUrl: json['trailerUrl'] as String,
+      anio: json['anio'] as String,
+      puntuacion: json['puntuacion'] as String,
+    );
+  }
 
   final String titulo;
   final String posterUrl;

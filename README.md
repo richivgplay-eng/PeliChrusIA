@@ -1,40 +1,93 @@
 # PeliChrus
 
-Aplicación Flutter de recomendaciones de películas con Gemini, TMDB, voz y
-reconocimiento de voz. El proyecto incluye destinos para Android, iOS y Web.
+Aplicación Flutter multiplataforma de recomendaciones de películas. Gemini
+genera las sugerencias y TMDB aporta información, pósteres y disponibilidad en
+Colombia. Las claves de ambos servicios se leen únicamente desde Firebase
+Functions Secret Manager; no se incluyen en Flutter ni en el repositorio.
 
 ## Requisitos
 
 - Flutter instalado.
-- Una clave de API de Gemini y una clave API v3 de TMDB.
+- Node.js 22 o superior y npm.
+- Firebase CLI (`npm install -g firebase-tools`).
+- Un proyecto de Firebase con el plan Blaze habilitado para desplegar Cloud
+  Functions. Configura alertas y límites de presupuesto en Google Cloud.
+- Claves de Gemini y TMDB. No las guardes en archivos del proyecto.
 
-## Ejecutar
+## Configuración y despliegue
 
-Desde la raíz del proyecto, en PowerShell, pasa las claves al ejecutar la app:
-
-```powershell
-flutter run --dart-define="GEMINI_API_KEY=TU_CLAVE_GEMINI" --dart-define="TMDB_API_KEY=TU_CLAVE_TMDB"
-```
-
-Para generar la versión web:
+Inicia sesión y averigua el ID de tu proyecto:
 
 ```powershell
-flutter build web --dart-define="GEMINI_API_KEY=TU_CLAVE_GEMINI" --dart-define="TMDB_API_KEY=TU_CLAVE_TMDB"
+firebase login
+firebase projects:list
 ```
 
-Las claves se leen en `lib/api_config.dart` y no se guardan en el repositorio.
-No las agregues directamente al código ni las publiques: los valores `dart-define`
-incluidos en una aplicación cliente pueden extraerse del artefacto compilado.
-Para producción, usa un backend para proteger las claves.
+Instala las dependencias del backend:
+
+```powershell
+npm --prefix functions install
+npm --prefix functions test
+```
+
+Guarda las claves interactivamente en Firebase Secret Manager. La CLI te
+solicita cada valor; no lo agregues como argumento al comando:
+
+```powershell
+firebase functions:secrets:set GEMINI_API_KEY --project TU_PROJECT_ID
+firebase functions:secrets:set TMDB_API_KEY --project TU_PROJECT_ID
+```
+
+Compila Flutter Web y despliega Functions y Hosting:
+
+```powershell
+flutter build web
+firebase deploy --only functions,hosting --project TU_PROJECT_ID
+```
+
+La web quedará en `https://TU_PROJECT_ID.web.app`. Firebase Hosting dirige las
+peticiones `/api/recommendations` al backend. Functions está en la región
+`us-central1`.
+
+El endpoint aplica validación de texto, CORS y un límite básico de consultas
+por IP en cada instancia. El límite en memoria no sustituye Firebase App Check
+y no impide por sí solo el uso automatizado desde clientes externos. Antes de
+compartir ampliamente la app, configura App Check para web, Android e iOS y
+activa presupuestos/alertas de facturación en Google Cloud.
+
+Para ejecutar Android o iOS contra el backend desplegado, usa la URL base
+pública de la función (no es una clave):
+
+```powershell
+flutter run --dart-define="FIREBASE_FUNCTIONS_URL=https://us-central1-TU_PROJECT_ID.cloudfunctions.net/api"
+```
+
+La URL también se puede establecer en la configuración de ejecución de VS Code.
+No pases `GEMINI_API_KEY` ni `TMDB_API_KEY` a Flutter: el backend los lee como
+secretos gestionados por Firebase.
+
+## Probar las funciones localmente
+
+Crea `functions/.secret.local` con este formato:
+
+```dotenv
+GEMINI_API_KEY=tu_clave_de_gemini
+TMDB_API_KEY=tu_clave_de_tmdb
+```
+
+Ese archivo está excluido de Git. No pegues claves en el código ni lo subas a
+GitHub. Inicia los emuladores con:
+
+```powershell
+firebase emulators:start --only functions,hosting --project TU_PROJECT_ID
+```
 
 ## Imágenes
 
-Coloca los recursos en `assets/`:
+Las imágenes de Chrus viven en `assets/`: `chrus_neutral.png`,
+`chrus_feliz.png`, `chrus_pensando.png` y `chrus_triste.png`. El logo
+`logo_pelichrus.png` es opcional; si falta, se muestra el nombre de la app.
 
-- `chrus_neutral.png`
-- `chrus_feliz.png`
-- `chrus_pensando.png`
-- `chrus_triste.png`
-- `logo_pelichrus.png` (opcional; se muestra el nombre si no está disponible)
-
-La carpeta está declarada en `pubspec.yaml`.
+La aplicación atribuye a TMDB el origen de sus datos. Consulta sus condiciones
+antes de publicar o monetizar el servicio: su API gratuita para desarrolladores
+es para uso no comercial.

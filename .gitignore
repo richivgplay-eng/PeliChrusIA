@@ -1,5 +1,8 @@
 .dart_tool/
+.firebase/
 .idea/
+.runtimeconfig.json
+.secret.local
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
@@ -11,6 +14,7 @@ android/local.properties
 android/.gradle/
 ios/Pods/
 ios/.symlinks/
+functions/node_modules/
 .vscode/
 .env
 .env.*
