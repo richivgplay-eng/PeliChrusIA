@@ -1,18 +1,19 @@
 import 'package:flutter/foundation.dart';
 
-/// Direcciones públicas del backend; aquí nunca se guardan claves de API.
+/// La web usa el Worker que también sirve sus archivos estáticos.
+/// Las apps móviles reciben la URL pública al compilarlas.
 class ApiConfig {
-  static const functionsUrl = String.fromEnvironment(
-    'FIREBASE_FUNCTIONS_URL',
-    defaultValue: 'https://us-central1-pelichrusia.cloudfunctions.net/api',
-  );
+  static const workerUrl = String.fromEnvironment('CLOUDFLARE_WORKER_URL');
 
   static Uri get recommendationsUri {
     if (kIsWeb) {
       return Uri.base.resolve('/api/recommendations');
     }
-
-    final baseUrl = functionsUrl.replaceFirst(RegExp(r'/+$'), '');
-    return Uri.parse('$baseUrl/recommendations');
+    if (workerUrl.isEmpty) {
+      throw StateError(
+        'Define CLOUDFLARE_WORKER_URL con la URL pública del Worker.',
+      );
+    }
+    return Uri.parse(workerUrl).resolve('/api/recommendations');
   }
 }

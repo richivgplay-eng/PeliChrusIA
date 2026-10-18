@@ -1,0 +1,12 @@
+{
+  "name": "pelichrus-cloudflare",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "deploy": "npm run build:web && wrangler deploy",
+    "build:web": "cd .. && flutter build web"
+  },
+  "devDependencies": {
+    "wrangler": "^4.32.0"
+  }
+}

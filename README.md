@@ -1,94 +1,93 @@
 # PeliChrus
 
-Aplicación Flutter multiplataforma de recomendaciones de películas. Gemini
-genera las sugerencias y TMDB aporta información, pósteres y disponibilidad en
-Colombia. Las claves de ambos servicios se leen únicamente desde Firebase
-Functions Secret Manager; no se incluyen en Flutter ni en el repositorio.
+App Flutter de recomendaciones con Gemini, TMDB y reconocimiento/voz. La web y
+su API se publican juntas en Cloudflare Workers con assets estáticos. Las claves
+de Gemini y TMDB se guardan como secretos de Cloudflare, nunca en Flutter ni en
+GitHub.
 
-## Requisitos
+## Coste y límites
 
-- Flutter instalado.
-- Node.js 22 o superior y npm.
-- Firebase CLI (`npm install -g firebase-tools`).
-- Un proyecto de Firebase con el plan Blaze habilitado para desplegar Cloud
-  Functions. Configura alertas y límites de presupuesto en Google Cloud.
-- Claves de Gemini y TMDB. No las guardes en archivos del proyecto.
+Cloudflare Workers ofrece un plan gratuito sin cuota mensual: incluye hasta
+100.000 solicitudes del Worker al día; servir archivos estáticos no consume
+esa cuota. El plan gratuito tiene límites de CPU y puede cambiar según las
+condiciones de Cloudflare. Gemini y TMDB tienen sus propios límites, cuotas y
+términos: el backend no los elimina. La API gratuita de TMDB es para uso no
+comercial y requiere atribución.
+Consulta [los límites y precios de Cloudflare Workers](https://developers.cloudflare.com/workers/platform/pricing/),
+[el nivel gratuito de Gemini](https://ai.google.dev/gemini-api/docs/pricing) y
+[las condiciones de TMDB](https://developer.themoviedb.org/docs/faq) antes de
+publicar el proyecto.
 
-## Configuración y despliegue
+Render también ofrece servicios gratuitos, pero sus web services gratuitos se
+apagan tras 15 minutos sin tráfico y tardan alrededor de un minuto en despertar.
+Para este backend que depende de Gemini/TMDB, Workers evita esa pausa en el
+nivel gratuito. Consulta los [límites gratuitos de Render](https://render.com/docs/free).
 
-Inicia sesión y averigua el ID de tu proyecto:
+El endpoint es accesible públicamente para que pueda llamarlo la app. La
+validación y el control de origen ayudan a manejar solicitudes, pero no
+garantizan que un tercero no invoque directamente la API. Configura límites de
+cuota en Google AI Studio y supervisa el uso de las claves.
 
-```powershell
-firebase login
-firebase projects:list
-```
+## Publicar la web y el backend
 
-Instala las dependencias del backend:
+1. Crea/inicia sesión en una cuenta de Cloudflare y conecta el repositorio
+   `richivgplay-eng/PeliChrusIA`, o usa Wrangler desde PowerShell.
+2. Desde la raíz del proyecto instala Wrangler:
 
-```powershell
-npm --prefix functions install
-npm --prefix functions test
-```
+   ```powershell
+   npm --prefix cloudflare install
+   ```
 
-Guarda las claves interactivamente en Firebase Secret Manager. La CLI te
-solicita cada valor; no lo agregues como argumento al comando:
+3. Abre una terminal en la carpeta `cloudflare` e inicia sesión:
 
-```powershell
-firebase functions:secrets:set GEMINI_API_KEY
-firebase functions:secrets:set TMDB_API_KEY
-```
+   ```powershell
+   cd cloudflare
+   .\node_modules\.bin\wrangler.cmd login
+   ```
 
-Compila Flutter Web y despliega Functions y Hosting:
+4. Crea secretos nuevos desde la terminal. Wrangler solicitará cada valor de
+   forma interactiva; **no añadas el valor como argumento**:
 
-```powershell
-flutter build web
-firebase deploy --only functions,hosting
-```
+   ```powershell
+   .\node_modules\.bin\wrangler.cmd secret put GEMINI_API_KEY
+   .\node_modules\.bin\wrangler.cmd secret put TMDB_API_KEY
+   ```
 
-El proyecto `pelichrusia` ya está seleccionado en `.firebaserc`. La web quedará
-en `https://pelichrusia.web.app`. Firebase Hosting dirige las
-peticiones `/api/recommendations` al backend. Functions está en la región
-`us-central1`.
+5. Publica el Worker y la aplicación web:
 
-El endpoint aplica validación de texto, CORS y un límite básico de consultas
-por IP en cada instancia. El límite en memoria no sustituye Firebase App Check
-y no impide por sí solo el uso automatizado desde clientes externos. Antes de
-compartir ampliamente la app, configura App Check para web, Android e iOS y
-activa presupuestos/alertas de facturación en Google Cloud.
+   ```powershell
+   npm run deploy
+   ```
 
-Para ejecutar Android o iOS contra el backend desplegado, usa la URL base
-pública de la función (no es una clave):
-
-```powershell
-flutter run
-```
-
-La URL del backend móvil ya está configurada para `pelichrusia`. No pases
-`GEMINI_API_KEY` ni `TMDB_API_KEY` a Flutter: el backend los lee como secretos
-gestionados por Firebase.
-
-## Probar las funciones localmente
-
-Crea `functions/.secret.local` con este formato:
-
-```dotenv
-GEMINI_API_KEY=tu_clave_de_gemini
-TMDB_API_KEY=tu_clave_de_tmdb
-```
-
-Ese archivo está excluido de Git. No pegues claves en el código ni lo subas a
-GitHub. Inicia los emuladores con:
+Wrangler muestra la URL pública al terminar. La web usa el mismo origen para
+`/api/recommendations`. Para compilar la app móvil usa esa URL, por ejemplo:
 
 ```powershell
-firebase emulators:start --only functions,hosting --project pelichrusia
+flutter run --dart-define="CLOUDFLARE_WORKER_URL=https://pelichrus-api.TU_SUBDOMINIO.workers.dev"
 ```
 
-## Imágenes
+Sustituye la URL de ejemplo por la que mostró Wrangler. No uses `--dart-define`
+para las claves de Gemini o TMDB.
 
-Las imágenes de Chrus viven en `assets/`: `chrus_neutral.png`,
-`chrus_feliz.png`, `chrus_pensando.png` y `chrus_triste.png`. El logo
-`logo_pelichrus.png` es opcional; si falta, se muestra el nombre de la app.
+## Verificación
 
-La aplicación atribuye a TMDB el origen de sus datos. Consulta sus condiciones
-antes de publicar o monetizar el servicio: su API gratuita para desarrolladores
-es para uso no comercial.
+```powershell
+cd cloudflare
+npm test
+```
+
+## Seguridad de claves
+
+Las claves publicadas anteriormente en mensajes deben considerarse
+comprometidas: revócalas y crea reemplazos antes de configurar los secretos.
+No las subas a GitHub, no las escribas en los comandos y no las compartas aquí.
+El Worker tampoco elimina los límites ni términos de uso de Gemini o TMDB.
+
+## Imágenes y atribución
+
+Los avatares están en `assets/`: `chrus_neutral.png`, `chrus_feliz.png`,
+`chrus_pensando.png` y `chrus_triste.png`. El logo `logo_pelichrus.png` es
+opcional; sin él se muestra el nombre de la app.
+
+La aplicación muestra la atribución requerida: «Este producto utiliza la API
+de TMDB, pero no está respaldado ni certificado por TMDB».
