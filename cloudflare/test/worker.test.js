@@ -1,9 +1,13 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-const { allowedOrigin, fetch: handleRequest } = require('../src/index');
-const { mapMovie, parseGeminiResponse, validateMessage } =
-  require('../src/domain');
+import worker, { allowedOrigin } from '../src/index.js';
+import {
+  mapMovie,
+  parseGeminiResponse,
+  validateMessage,
+} from '../src/domain.js';
+const handleRequest = worker.fetch;
 
 test('valida y normaliza consultas', () => {
   assert.equal(validateMessage('  una comedia  '), 'una comedia');
@@ -13,15 +17,15 @@ test('valida y normaliza consultas', () => {
 
 test('limita y elimina títulos duplicados de Gemini', () => {
   const result = parseGeminiResponse({
-    candidates: [{
-      content: {
-        parts: [{
-          text: JSON.stringify({
-            respuesta: 'Aquí tienes películas.',
-            titulos: ['Dune', 'Dune', 'Arrival', 'Interstellar', 'Extra'],
-          }),
-        }],
-      },
+    steps: [{
+      type: 'model_output',
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          respuesta: 'Aquí tienes películas.',
+          titulos: ['Dune', 'Dune', 'Arrival', 'Interstellar', 'Extra'],
+        }),
+      }],
     }],
   });
   assert.deepEqual(result, {

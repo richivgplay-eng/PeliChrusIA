@@ -35,7 +35,7 @@ cuota en Google AI Studio y supervisa el uso de las claves.
 2. Desde la raíz del proyecto instala Wrangler:
 
    ```powershell
-   npm --prefix cloudflare install
+   & "$env:ProgramFiles\nodejs\npm.cmd" --prefix cloudflare install
    ```
 
 3. Abre una terminal en la carpeta `cloudflare` e inicia sesión:
@@ -53,27 +53,27 @@ cuota en Google AI Studio y supervisa el uso de las claves.
    .\node_modules\.bin\wrangler.cmd secret put TMDB_API_KEY
    ```
 
-5. Publica el Worker y la aplicación web:
+5. Regresa a la raíz del proyecto y publica el Worker y la aplicación web:
 
    ```powershell
-   npm run deploy
+   cd ..
+   & "$env:ProgramFiles\nodejs\npm.cmd" --prefix cloudflare run deploy
    ```
 
-Wrangler muestra la URL pública al terminar. La web usa el mismo origen para
+La aplicación publicada está en
+<https://pelichrus-api.richivgplay.workers.dev>. Usa el mismo origen para
 `/api/recommendations`. Para compilar la app móvil usa esa URL, por ejemplo:
 
 ```powershell
-flutter run --dart-define="CLOUDFLARE_WORKER_URL=https://pelichrus-api.TU_SUBDOMINIO.workers.dev"
+flutter run --dart-define="CLOUDFLARE_WORKER_URL=https://pelichrus-api.richivgplay.workers.dev"
 ```
 
-Sustituye la URL de ejemplo por la que mostró Wrangler. No uses `--dart-define`
-para las claves de Gemini o TMDB.
+No uses `--dart-define` para las claves de Gemini o TMDB.
 
 ## Verificación
 
 ```powershell
-cd cloudflare
-npm test
+& "$env:ProgramFiles\nodejs\npm.cmd" --prefix cloudflare test
 ```
 
 ## Seguridad de claves

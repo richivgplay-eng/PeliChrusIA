@@ -27,8 +27,11 @@ function validateMessage(value) {
 }
 
 function parseGeminiResponse(data) {
-  const text = data?.candidates?.[0]?.content?.parts
-    ?.find((part) => typeof part.text === 'string')
+  const outputStep = data?.steps?.findLast(
+    (step) => step.type === 'model_output',
+  );
+  const text = outputStep?.content
+    ?.find((part) => part.type === 'text' && typeof part.text === 'string')
     ?.text;
   if (!text) {
     throw new Error('La respuesta de Gemini no contiene recomendaciones.');
@@ -80,7 +83,7 @@ function mapMovie(movie, providers) {
   };
 }
 
-module.exports = {
+export {
   RequestError,
   mapMovie,
   parseGeminiResponse,

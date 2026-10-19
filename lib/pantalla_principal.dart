@@ -194,7 +194,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'texto': texto}),
         )
-        .timeout(const Duration(seconds: 65));
+        .timeout(const Duration(seconds: 90));
     final dynamic body = jsonDecode(response.body);
     if (body is! Map<String, dynamic>) {
       throw const FormatException('El servidor devolvió datos inválidos.');

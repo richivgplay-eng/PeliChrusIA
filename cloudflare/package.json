@@ -1,6 +1,7 @@
 {
   "name": "pelichrus-cloudflare",
   "private": true,
+  "type": "module",
   "scripts": {
     "test": "node --test",
     "deploy": "npm run build:web && wrangler deploy",
